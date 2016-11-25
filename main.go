@@ -25,6 +25,12 @@ type ConfData struct {
 	TokenSecret    string `yaml:"token_secret"`
 }
 
+type Mockingbird struct {
+	*ConfData
+	APIBase string
+	APIVer  string
+}
+
 type JsonTime struct {
 	time.Time
 }
@@ -45,7 +51,7 @@ type SearchResults struct {
 
 type Status struct {
 	CreatedAt JsonTime        `json:"created_at"`
-	Id        int64           `json:"id"`
+	Id        uint64          `json:"id"`
 	Entities  TwitterEntities `json:"entities"`
 }
 
@@ -63,20 +69,21 @@ var (
 
 func main() {
 	flag.Parse()
-	config := LoadConfig()
+	conf := LoadConf()
+	mockingbird := NewMockingbird(conf)
 
 	c := oauth.NewConsumer(
-		config.ConsumerKey,
-		config.ConsumerSecret,
+		mockingbird.ConsumerKey,
+		mockingbird.ConsumerSecret,
 		oauth.ServiceProvider{
-			RequestTokenUrl:   "https://api.twitter.com/oauth/request_token",
-			AuthorizeTokenUrl: "https://api.twitter.com/oauth/authorize",
-			AccessTokenUrl:    "https://api.twitter.com/oauth/access_token",
+			RequestTokenUrl:   mockingbird.APIBase + "/oauth/request_token",
+			AuthorizeTokenUrl: mockingbird.APIBase + "/oauth/authorize",
+			AccessTokenUrl:    mockingbird.APIBase + "/oauth/access_token",
 		})
 
 	accessToken := &oauth.AccessToken{
-		Token:  config.AccessToken,
-		Secret: config.TokenSecret,
+		Token:  mockingbird.AccessToken,
+		Secret: mockingbird.TokenSecret,
 	}
 
 	client, err := c.MakeHttpClient(accessToken)
@@ -85,7 +92,7 @@ func main() {
 	}
 
 	// search using search_term specified in config file
-	rawResults, err := search(client, config.SearchTerm)
+	rawResults, err := mockingbird.search(client)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -107,7 +114,7 @@ func main() {
 			continue
 		}
 
-		err = retweet(client, result.Id)
+		err = mockingbird.retweet(client, result.Id)
 		if err != nil {
 			fmt.Printf("can't retweet status with id: %d, %s\n", result.Id, err.Error())
 		}
@@ -115,7 +122,7 @@ func main() {
 	}
 }
 
-func LoadConfig() *ConfData {
+func LoadConf() *ConfData {
 	conf := ConfData{}
 	buf, err := ioutil.ReadFile(*configFile)
 	if err != nil {
@@ -128,13 +135,17 @@ func LoadConfig() *ConfData {
 	return &conf
 }
 
-func search(client *http.Client, searchTerm string) ([]byte, error) {
-	searchUrl, err := url.Parse("https://api.twitter.com/1.1/search/tweets.json")
+func NewMockingbird(conf *ConfData) *Mockingbird {
+	return &Mockingbird{conf, "https://api.twitter.com", "1.1"}
+}
+
+func (m *Mockingbird) search(client *http.Client) ([]byte, error) {
+	searchUrl, err := url.Parse(m.APIBase + "/" + m.APIVer + "/search/tweets.json")
 	if err != nil {
 		return []byte(``), err
 	}
 	parameters := url.Values{}
-	parameters.Set("q", searchTerm)
+	parameters.Set("q", m.SearchTerm)
 	searchUrl.RawQuery = parameters.Encode()
 
 	response, err := client.Get(searchUrl.String())
@@ -146,8 +157,8 @@ func search(client *http.Client, searchTerm string) ([]byte, error) {
 	return ioutil.ReadAll(response.Body)
 }
 
-func retweet(client *http.Client, tweetId int64) error {
-	retweetUrl, err := url.Parse("https://api.twitter.com/1.1/statuses/retweet/")
+func (m *Mockingbird) retweet(client *http.Client, tweetId uint64) error {
+	retweetUrl, err := url.Parse(m.APIBase + "/" + m.APIVer + "/statuses/retweet/")
 	if err != nil {
 		return err
 	}
