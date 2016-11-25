@@ -4,13 +4,15 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
+
+	"gopkg.in/yaml.v2"
 
 	"github.com/mrjones/oauth"
 )
@@ -65,10 +67,18 @@ type TwitterUrlEntity struct {
 
 var (
 	configFile = flag.String("c", "config.yml", "location of config file")
+	verCheck   = flag.Bool("v", false, "print version number for this software")
+	version    string
 )
 
 func main() {
 	flag.Parse()
+
+	if *verCheck {
+		fmt.Println(version)
+		os.Exit(0)
+	}
+
 	conf := LoadConf()
 	mockingbird := NewMockingbird(conf)
 
